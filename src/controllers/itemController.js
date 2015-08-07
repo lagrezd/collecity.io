@@ -1,7 +1,7 @@
 'use strict';
 
 app
-    .controller('itemIndex', function ($scope) {
+    .controller('itemIndex', function ($scope, userProvider) {
 
     })
 

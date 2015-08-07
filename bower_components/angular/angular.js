@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.4.4-build.4147+sha.bb281f8
+ * @license AngularJS v1.4.3
  * (c) 2010-2015 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -57,7 +57,7 @@ function minErr(module, ErrorConstructor) {
       return match;
     });
 
-    message += '\nhttp://errors.angularjs.org/1.4.4-build.4147+sha.bb281f8/' +
+    message += '\nhttp://errors.angularjs.org/1.4.3/' +
       (module ? module + '/' : '') + code;
 
     for (i = SKIP_INDEXES, paramPrefix = '?'; i < templateArgs.length; i++, paramPrefix = '&') {
@@ -423,8 +423,6 @@ function baseExtend(dst, objs, deep) {
       if (deep && isObject(src)) {
         if (isDate(src)) {
           dst[key] = new Date(src.valueOf());
-        } else if (isRegExp(src)) {
-          dst[key] = new RegExp(src);
         } else {
           if (!isObject(dst[key])) dst[key] = isArray(src) ? [] : {};
           baseExtend(dst[key], [src], true);
@@ -1055,39 +1053,22 @@ function equals(o1, o2) {
 }
 
 var csp = function() {
-  if (!isDefined(csp.rules)) {
+  if (isDefined(csp.isActive_)) return csp.isActive_;
 
+  var active = !!(document.querySelector('[ng-csp]') ||
+                  document.querySelector('[data-ng-csp]'));
 
-    var ngCspElement = (document.querySelector('[ng-csp]') ||
-                    document.querySelector('[data-ng-csp]'));
-
-    if (ngCspElement) {
-      var ngCspAttribute = ngCspElement.getAttribute('ng-csp') ||
-                    ngCspElement.getAttribute('data-ng-csp');
-      csp.rules = {
-        noUnsafeEval: !ngCspAttribute || (ngCspAttribute.indexOf('no-unsafe-eval') !== -1),
-        noInlineStyle: !ngCspAttribute || (ngCspAttribute.indexOf('no-inline-style') !== -1)
-      };
-    } else {
-      csp.rules = {
-        noUnsafeEval: noUnsafeEval(),
-        noInlineStyle: false
-      };
-    }
-  }
-
-  return csp.rules;
-
-  function noUnsafeEval() {
+  if (!active) {
     try {
       /* jshint -W031, -W054 */
       new Function('');
       /* jshint +W031, +W054 */
-      return false;
     } catch (e) {
-      return true;
+      active = true;
     }
   }
+
+  return (csp.isActive_ = active);
 };
 
 /**
@@ -1319,19 +1300,13 @@ function tryDecodeURIComponent(value) {
  * @returns {Object.<string,boolean|Array>}
  */
 function parseKeyValue(/**string*/keyValue) {
-  var obj = {};
+  var obj = {}, key_value, key;
   forEach((keyValue || "").split('&'), function(keyValue) {
-    var splitPoint, key, val;
     if (keyValue) {
-      key = keyValue = keyValue.replace(/\+/g,'%20');
-      splitPoint = keyValue.indexOf('=');
-      if (splitPoint !== -1) {
-        key = keyValue.substring(0, splitPoint);
-        val = keyValue.substring(splitPoint + 1);
-      }
-      key = tryDecodeURIComponent(key);
+      key_value = keyValue.replace(/\+/g,'%20').split('=');
+      key = tryDecodeURIComponent(key_value[0]);
       if (isDefined(key)) {
-        val = isDefined(val) ? tryDecodeURIComponent(val) : true;
+        var val = isDefined(key_value[1]) ? tryDecodeURIComponent(key_value[1]) : true;
         if (!hasOwnProperty.call(obj, key)) {
           obj[key] = val;
         } else if (isArray(obj[key])) {
@@ -2269,6 +2244,7 @@ function toDebugString(obj) {
 /* global angularModule: true,
   version: true,
 
+  $LocaleProvider,
   $CompileProvider,
 
   htmlAnchorDirective,
@@ -2285,6 +2261,7 @@ function toDebugString(obj) {
   ngClassDirective,
   ngClassEvenDirective,
   ngClassOddDirective,
+  ngCspDirective,
   ngCloakDirective,
   ngControllerDirective,
   ngFormDirective,
@@ -2329,7 +2306,6 @@ function toDebugString(obj) {
   $DocumentProvider,
   $ExceptionHandlerProvider,
   $FilterProvider,
-  $$ForceReflowProvider,
   $InterpolateProvider,
   $IntervalProvider,
   $$HashMapProvider,
@@ -2373,11 +2349,11 @@ function toDebugString(obj) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.4.4-build.4147+sha.bb281f8',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.4.3',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 4,
-  dot: 4,
-  codeName: 'snapshot'
+  dot: 3,
+  codeName: 'foam-acceleration'
 };
 
 
@@ -2416,6 +2392,11 @@ function publishExternalAPI(angular) {
   });
 
   angularModule = setupModuleLoader(window);
+  try {
+    angularModule('ngLocale');
+  } catch (e) {
+    angularModule('ngLocale', []).provider('$locale', $LocaleProvider);
+  }
 
   angularModule('ng', ['ngLocale'], ['$provide',
     function ngModule($provide) {
@@ -2486,7 +2467,6 @@ function publishExternalAPI(angular) {
         $document: $DocumentProvider,
         $exceptionHandler: $ExceptionHandlerProvider,
         $filter: $FilterProvider,
-        $$forceReflow: $$ForceReflowProvider,
         $interpolate: $InterpolateProvider,
         $interval: $IntervalProvider,
         $http: $HttpProvider,
@@ -4362,7 +4342,6 @@ function createInjector(modulesToLoad, strictDi) {
   // Module Loading
   ////////////////////////////////////
   function loadModules(modulesToLoad) {
-    assertArg(isUndefined(modulesToLoad) || isArray(modulesToLoad), 'modulesToLoad', 'not an array');
     var runBlocks = [], moduleFn;
     forEach(modulesToLoad, function(module) {
       if (loadedModules.get(module)) return;
@@ -4872,31 +4851,31 @@ var $$CoreAnimateQueueProvider = function() {
     };
 
     function addRemoveClassesPostDigest(element, add, remove) {
-      var classVal, data = postDigestQueue.get(element);
+      var data = postDigestQueue.get(element);
+      var classVal;
 
       if (!data) {
         postDigestQueue.put(element, data = {});
         postDigestElements.push(element);
       }
 
-      var updateData = function(classes, value) {
-        var changed = false;
-        if (classes) {
-          classes = isString(classes) ? classes.split(' ') :
-                    isArray(classes) ? classes : [];
-          forEach(classes, function(className) {
-            if (className) {
-              changed = true;
-              data[className] = value;
-            }
-          });
-        }
-        return changed;
-      };
+      if (add) {
+        forEach(add.split(' '), function(className) {
+          if (className) {
+            data[className] = true;
+          }
+        });
+      }
 
-      var classesAdded = updateData(add, true);
-      var classesRemoved = updateData(remove, false);
-      if ((!classesAdded && !classesRemoved) || postDigestElements.length > 1) return;
+      if (remove) {
+        forEach(remove.split(' '), function(className) {
+          if (className) {
+            data[className] = false;
+          }
+        });
+      }
+
+      if (postDigestElements.length > 1) return;
 
       $rootScope.$$postDigest(function() {
         forEach(postDigestElements, function(element) {
@@ -5354,6 +5333,16 @@ var $AnimateProvider = ['$provide', function($provide) {
     };
   }];
 }];
+
+function $$AsyncCallbackProvider() {
+  this.$get = ['$$rAF', '$timeout', function($$rAF, $timeout) {
+    return $$rAF.supported
+      ? function(fn) { return $$rAF(fn); }
+      : function(fn) {
+        return $timeout(fn, 0, false);
+      };
+  }];
+}
 
 /* global stripHash: true */
 
@@ -6517,7 +6506,7 @@ function $TemplateCacheProvider() {
  *     otherwise the {@link error:$compile:ctreq Missing Required Controller} error is thrown.
  *
  *     Note that you can also require the directive's own controller - it will be made available like
- *     any other controller.
+ *     like any other controller.
  *
  *   * `transcludeFn` - A transclude linking function pre-bound to the correct transclusion scope.
  *     This is the same as the `$transclude`
@@ -6543,7 +6532,7 @@ function $TemplateCacheProvider() {
  *
  * ### Transclusion
  *
- * Transclusion is the process of extracting a collection of DOM elements from one part of the DOM and
+ * Transclusion is the process of extracting a collection of DOM element from one part of the DOM and
  * copying them to another part of the DOM, while maintaining their connection to the original AngularJS
  * scope from where they were taken.
  *
@@ -7298,7 +7287,7 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
 
         listeners.push(fn);
         $rootScope.$evalAsync(function() {
-          if (!listeners.$$inter && attrs.hasOwnProperty(key) && !isUndefined(attrs[key])) {
+          if (!listeners.$$inter && attrs.hasOwnProperty(key)) {
             // no one registered attribute interpolation function, so lets call it manually
             fn(attrs[key]);
           }
@@ -8677,19 +8666,24 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
         lastValue,
         parentGet, parentSet, compare;
 
+        if (!hasOwnProperty.call(attrs, attrName)) {
+          // In the case of user defined a binding with the same name as a method in Object.prototype but didn't set
+          // the corresponding attribute. We need to make sure subsequent code won't access to the prototype function
+          attrs[attrName] = undefined;
+        }
+
         switch (mode) {
 
           case '@':
-            if (!optional && !hasOwnProperty.call(attrs, attrName)) {
-              destination[scopeName] = attrs[attrName] = void 0;
+            if (!attrs[attrName] && !optional) {
+              destination[scopeName] = undefined;
             }
+
             attrs.$observe(attrName, function(value) {
-              if (isString(value)) {
-                destination[scopeName] = value;
-              }
+              destination[scopeName] = value;
             });
             attrs.$$observers[attrName].$$scope = scope;
-            if (isString(attrs[attrName])) {
+            if (attrs[attrName]) {
               // If the attribute has been provided then we trigger an interpolation to ensure
               // the value is there for use in the link fn
               destination[scopeName] = $interpolate(attrs[attrName])(scope);
@@ -8697,13 +8691,11 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
             break;
 
           case '=':
-            if (!hasOwnProperty.call(attrs, attrName)) {
-              if (optional) break;
-              attrs[attrName] = void 0;
+            if (optional && !attrs[attrName]) {
+              return;
             }
-            if (optional && !attrs[attrName]) break;
-
             parentGet = $parse(attrs[attrName]);
+
             if (parentGet.literal) {
               compare = equals;
             } else {
@@ -8742,8 +8734,7 @@ function $CompileProvider($provide, $$sanitizeUriProvider) {
             break;
 
           case '&':
-            // Don't assign Object.prototype method to scope
-            parentGet = attrs.hasOwnProperty(attrName) ? $parse(attrs[attrName]) : noop;
+            parentGet = $parse(attrs[attrName]);
 
             // Don't assign noop to destination if expression is not valid
             if (parentGet === noop && optional) break;
@@ -9120,29 +9111,6 @@ function $ExceptionHandlerProvider() {
   }];
 }
 
-var $$ForceReflowProvider = function() {
-  this.$get = ['$document', function($document) {
-    return function(domNode) {
-      //the line below will force the browser to perform a repaint so
-      //that all the animated elements within the animation frame will
-      //be properly updated and drawn on screen. This is required to
-      //ensure that the preparation animation is properly flushed so that
-      //the active state picks up from there. DO NOT REMOVE THIS LINE.
-      //DO NOT OPTIMIZE THIS LINE. THE MINIFIER WILL REMOVE IT OTHERWISE WHICH
-      //WILL RESULT IN AN UNPREDICTABLE BUG THAT IS VERY HARD TO TRACK DOWN AND
-      //WILL TAKE YEARS AWAY FROM YOUR LIFE.
-      if (domNode) {
-        if (!domNode.nodeType && domNode instanceof jqLite) {
-          domNode = domNode[0];
-        }
-      } else {
-        domNode = $document[0].body;
-      }
-      return domNode.offsetWidth + 1;
-    };
-  }];
-};
-
 var APPLICATION_JSON = 'application/json';
 var CONTENT_TYPE_APPLICATION_JSON = {'Content-Type': APPLICATION_JSON + ';charset=utf-8'};
 var JSON_START = /^\[|^\{(?!\{)/;
@@ -9151,12 +9119,6 @@ var JSON_ENDS = {
   '{': /}$/
 };
 var JSON_PROTECTION_PREFIX = /^\)\]\}',?\n/;
-var $httpMinErr = minErr('$http');
-var $httpMinErrLegacyFn = function(method) {
-  return function() {
-    throw $httpMinErr('legacy', 'The method `{0}` on the promise returned from `$http` has been disabled.', method);
-  };
-};
 
 function serializeValue(v) {
   if (isObject(v)) {
@@ -9257,8 +9219,8 @@ function $HttpParamSerializerJQLikeProvider() {
       function serialize(toSerialize, prefix, topLevel) {
         if (toSerialize === null || isUndefined(toSerialize)) return;
         if (isArray(toSerialize)) {
-          forEach(toSerialize, function(value, index) {
-            serialize(value, prefix + '[' + (isObject(value) ? index : '') + ']');
+          forEach(toSerialize, function(value) {
+            serialize(value, prefix + '[]');
           });
         } else if (isObject(toSerialize) && !isDate(toSerialize)) {
           forEachSorted(toSerialize, function(value, key) {
@@ -9479,30 +9441,6 @@ function $HttpProvider() {
     return useApplyAsync;
   };
 
-  var useLegacyPromse = true;
-  /**
-   * @ngdoc method
-   * @name $httpProvider#useLegacyPromiseExtensions
-   * @description
-   *
-   * Configure `$http` service to return promises without the shorthand methods `success` and `error`.
-   * This should be used to make sure that applications work without these methods.
-   *
-   * Defaults to false. If no value is specified, returns the current configured value.
-   *
-   * @param {boolean=} value If true, `$http` will return a normal promise without the `success` and `error` methods.
-   *
-   * @returns {boolean|Object} If a value is specified, returns the $httpProvider for chaining.
-   *    otherwise, returns the current configured value.
-   **/
-  this.useLegacyPromiseExtensions = function(value) {
-    if (isDefined(value)) {
-      useLegacyPromse = !!value;
-      return this;
-    }
-    return useLegacyPromse;
-  };
-
   /**
    * @ngdoc property
    * @name $httpProvider#interceptors
@@ -9569,15 +9507,17 @@ function $HttpProvider() {
      *
      * ## General usage
      * The `$http` service is a function which takes a single argument — a configuration object —
-     * that is used to generate an HTTP request and returns  a {@link ng.$q promise}.
+     * that is used to generate an HTTP request and returns  a {@link ng.$q promise}
+     * with two $http specific methods: `success` and `error`.
      *
      * ```js
      *   // Simple GET request example :
      *   $http.get('/someUrl').
-     *     then(function(response) {
+     *     success(function(data, status, headers, config) {
      *       // this callback will be called asynchronously
      *       // when the response is available
-     *     }, function(response) {
+     *     }).
+     *     error(function(data, status, headers, config) {
      *       // called asynchronously if an error occurs
      *       // or server returns response with an error status.
      *     });
@@ -9586,23 +9526,21 @@ function $HttpProvider() {
      * ```js
      *   // Simple POST request example (passing data) :
      *   $http.post('/someUrl', {msg:'hello word!'}).
-     *     then(function(response) {
+     *     success(function(data, status, headers, config) {
      *       // this callback will be called asynchronously
      *       // when the response is available
-     *     }, function(response) {
+     *     }).
+     *     error(function(data, status, headers, config) {
      *       // called asynchronously if an error occurs
      *       // or server returns response with an error status.
      *     });
      * ```
      *
-     * The response object has these properties:
      *
-     *   - **data** – `{string|Object}` – The response body transformed with the transform
-     *     functions.
-     *   - **status** – `{number}` – HTTP status code of the response.
-     *   - **headers** – `{function([headerName])}` – Header getter function.
-     *   - **config** – `{Object}` – The configuration object that was used to generate the request.
-     *   - **statusText** – `{string}` – HTTP status text of the response.
+     * Since the returned value of calling the $http function is a `promise`, you can also use
+     * the `then` method to register callbacks, and these callbacks will receive a single argument –
+     * an object representing the response. See the API signature and type info below for more
+     * details.
      *
      * A response status code between 200 and 299 is considered a success status and
      * will result in the success callback being called. Note that if the response is a redirect,
@@ -9626,8 +9564,8 @@ function $HttpProvider() {
      * request data must be passed in for POST/PUT requests.
      *
      * ```js
-     *   $http.get('/someUrl').then(successCallback);
-     *   $http.post('/someUrl', data).then(successCallback);
+     *   $http.get('/someUrl').success(successCallback);
+     *   $http.post('/someUrl', data).success(successCallback);
      * ```
      *
      * Complete list of shortcut methods:
@@ -9640,14 +9578,6 @@ function $HttpProvider() {
      * - {@link ng.$http#jsonp $http.jsonp}
      * - {@link ng.$http#patch $http.patch}
      *
-     *
-     * ## Deprecation Notice
-     * <div class="alert alert-danger">
-     *   The `$http` legacy promise methods `success` and `error` have been deprecated.
-     *   Use the standard `then` method instead.
-     *   If {@link $httpProvider#useLegacyPromiseExtensions `$httpProvider.useLegacyPromiseExtensions`} is set to
-     *   `false` then these methods will throw {@link $http:legacy `$http/legacy`} error.
-     * </div>
      *
      * ## Setting HTTP Headers
      *
@@ -9692,7 +9622,7 @@ function $HttpProvider() {
      *  data: { test: 'test' }
      * }
      *
-     * $http(req).then(function(){...}, function(){...});
+     * $http(req).success(function(){...}).error(function(){...});
      * ```
      *
      * ## Transforming Requests and Responses
@@ -9924,6 +9854,7 @@ function $HttpProvider() {
      * In order to prevent collisions in environments where multiple Angular apps share the
      * same domain or subdomain, we recommend that each application uses unique cookie name.
      *
+     *
      * @param {object} config Object describing the request to be made and how it should be
      *    processed. The object has following properties:
      *
@@ -9968,9 +9899,20 @@ function $HttpProvider() {
      *    - **responseType** - `{string}` - see
      *      [XMLHttpRequest.responseType](https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#xmlhttprequest-responsetype).
      *
-     * @returns {HttpPromise} Returns a {@link ng.$q `Promise}` that will be resolved to a response object
-     *                        when the request succeeds or fails.
+     * @returns {HttpPromise} Returns a {@link ng.$q promise} object with the
+     *   standard `then` method and two http specific methods: `success` and `error`. The `then`
+     *   method takes two arguments a success and an error callback which will be called with a
+     *   response object. The `success` and `error` methods take a single argument - a function that
+     *   will be called when the request succeeds or fails respectively. The arguments passed into
+     *   these functions are destructured representation of the response object passed into the
+     *   `then` method. The response object has these properties:
      *
+     *   - **data** – `{string|Object}` – The response body transformed with the transform
+     *     functions.
+     *   - **status** – `{number}` – HTTP status code of the response.
+     *   - **headers** – `{function([headerName])}` – Header getter function.
+     *   - **config** – `{Object}` – The configuration object that was used to generate the request.
+     *   - **statusText** – `{string}` – HTTP status text of the response.
      *
      * @property {Array.<Object>} pendingRequests Array of config objects for currently pending
      *   requests. This is primarily meant to be used for debugging purposes.
@@ -10012,12 +9954,13 @@ function $HttpProvider() {
           $scope.response = null;
 
           $http({method: $scope.method, url: $scope.url, cache: $templateCache}).
-            then(function(response) {
-              $scope.status = response.status;
-              $scope.data = response.data;
-            }, function(response) {
-              $scope.data = response.data || "Request failed";
-              $scope.status = response.status;
+            success(function(data, status) {
+              $scope.status = status;
+              $scope.data = data;
+            }).
+            error(function(data, status) {
+              $scope.data = data || "Request failed";
+              $scope.status = status;
           });
         };
 
@@ -10122,28 +10065,23 @@ function $HttpProvider() {
         promise = promise.then(thenFn, rejectFn);
       }
 
-      if (useLegacyPromse) {
-        promise.success = function(fn) {
-          assertArgFn(fn, 'fn');
+      promise.success = function(fn) {
+        assertArgFn(fn, 'fn');
 
-          promise.then(function(response) {
-            fn(response.data, response.status, response.headers, config);
-          });
-          return promise;
-        };
+        promise.then(function(response) {
+          fn(response.data, response.status, response.headers, config);
+        });
+        return promise;
+      };
 
-        promise.error = function(fn) {
-          assertArgFn(fn, 'fn');
+      promise.error = function(fn) {
+        assertArgFn(fn, 'fn');
 
-          promise.then(null, function(response) {
-            fn(response.data, response.status, response.headers, config);
-          });
-          return promise;
-        };
-      } else {
-        promise.success = $httpMinErrLegacyFn('success');
-        promise.error = $httpMinErrLegacyFn('error');
-      }
+        promise.then(null, function(response) {
+          fn(response.data, response.status, response.headers, config);
+        });
+        return promise;
+      };
 
       return promise;
 
@@ -11187,6 +11125,75 @@ function $IntervalProvider() {
  *
  * * `id` – `{string}` – locale id formatted as `languageId-countryId` (e.g. `en-us`)
  */
+function $LocaleProvider() {
+  this.$get = function() {
+    return {
+      id: 'en-us',
+
+      NUMBER_FORMATS: {
+        DECIMAL_SEP: '.',
+        GROUP_SEP: ',',
+        PATTERNS: [
+          { // Decimal Pattern
+            minInt: 1,
+            minFrac: 0,
+            maxFrac: 3,
+            posPre: '',
+            posSuf: '',
+            negPre: '-',
+            negSuf: '',
+            gSize: 3,
+            lgSize: 3
+          },{ //Currency Pattern
+            minInt: 1,
+            minFrac: 2,
+            maxFrac: 2,
+            posPre: '\u00A4',
+            posSuf: '',
+            negPre: '(\u00A4',
+            negSuf: ')',
+            gSize: 3,
+            lgSize: 3
+          }
+        ],
+        CURRENCY_SYM: '$'
+      },
+
+      DATETIME_FORMATS: {
+        MONTH:
+            'January,February,March,April,May,June,July,August,September,October,November,December'
+            .split(','),
+        SHORTMONTH:  'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec'.split(','),
+        DAY: 'Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday'.split(','),
+        SHORTDAY: 'Sun,Mon,Tue,Wed,Thu,Fri,Sat'.split(','),
+        AMPMS: ['AM','PM'],
+        medium: 'MMM d, y h:mm:ss a',
+        'short': 'M/d/yy h:mm a',
+        fullDate: 'EEEE, MMMM d, y',
+        longDate: 'MMMM d, y',
+        mediumDate: 'MMM d, y',
+        shortDate: 'M/d/yy',
+        mediumTime: 'h:mm:ss a',
+        shortTime: 'h:mm a',
+        ERANAMES: [
+          "Before Christ",
+          "Anno Domini"
+        ],
+        ERAS: [
+          "BC",
+          "AD"
+        ]
+      },
+
+      pluralCat: function(num) {
+        if (num === 1) {
+          return 'one';
+        }
+        return 'other';
+      }
+    };
+  };
+}
 
 var PATH_MATCH = /^([^\?#]*)(\?([^#]*))?(#(.*))?$/,
     DEFAULT_PORTS = {'http': 80, 'https': 443, 'ftp': 21};
@@ -11277,12 +11284,12 @@ function serverBase(url) {
  *
  * @constructor
  * @param {string} appBase application base URL
- * @param {string} appBaseNoFile application base URL stripped of any filename
  * @param {string} basePrefix url path prefix
  */
-function LocationHtml5Url(appBase, appBaseNoFile, basePrefix) {
+function LocationHtml5Url(appBase, basePrefix) {
   this.$$html5 = true;
   basePrefix = basePrefix || '';
+  var appBaseNoFile = stripFile(appBase);
   parseAbsoluteUrl(appBase, this);
 
 
@@ -11356,10 +11363,10 @@ function LocationHtml5Url(appBase, appBaseNoFile, basePrefix) {
  *
  * @constructor
  * @param {string} appBase application base URL
- * @param {string} appBaseNoFile application base URL stripped of any filename
  * @param {string} hashPrefix hashbang prefix
  */
-function LocationHashbangUrl(appBase, appBaseNoFile, hashPrefix) {
+function LocationHashbangUrl(appBase, hashPrefix) {
+  var appBaseNoFile = stripFile(appBase);
 
   parseAbsoluteUrl(appBase, this);
 
@@ -11468,12 +11475,13 @@ function LocationHashbangUrl(appBase, appBaseNoFile, hashPrefix) {
  *
  * @constructor
  * @param {string} appBase application base URL
- * @param {string} appBaseNoFile application base URL stripped of any filename
  * @param {string} hashPrefix hashbang prefix
  */
-function LocationHashbangInHtml5Url(appBase, appBaseNoFile, hashPrefix) {
+function LocationHashbangInHtml5Url(appBase, hashPrefix) {
   this.$$html5 = true;
   LocationHashbangUrl.apply(this, arguments);
+
+  var appBaseNoFile = stripFile(appBase);
 
   this.$$parseLinkUrl = function(url, relHref) {
     if (relHref && relHref[0] === '#') {
@@ -12013,9 +12021,7 @@ function $LocationProvider() {
       appBase = stripHash(initialUrl);
       LocationMode = LocationHashbangUrl;
     }
-    var appBaseNoFile = stripFile(appBase);
-
-    $location = new LocationMode(appBase, appBaseNoFile, '#' + hashPrefix);
+    $location = new LocationMode(appBase, '#' + hashPrefix);
     $location.$$parseLinkUrl(initialUrl, initialUrl);
 
     $location.$$state = $browser.state();
@@ -12095,13 +12101,6 @@ function $LocationProvider() {
 
     // update $location when $browser url changes
     $browser.onUrlChange(function(newUrl, newState) {
-
-      if (isUndefined(beginsWith(appBaseNoFile, newUrl))) {
-        // If we are navigating outside of the app then force a reload
-        $window.location.href = newUrl;
-        return;
-      }
-
       $rootScope.$evalAsync(function() {
         var oldUrl = $location.absUrl();
         var oldState = $location.$$state;
@@ -14042,14 +14041,13 @@ function $ParseProvider() {
   var cacheDefault = createMap();
   var cacheExpensive = createMap();
 
-  this.$get = ['$filter', function($filter) {
-    var noUnsafeEval = csp().noUnsafeEval;
+  this.$get = ['$filter', '$sniffer', function($filter, $sniffer) {
     var $parseOptions = {
-          csp: noUnsafeEval,
+          csp: $sniffer.csp,
           expensiveChecks: false
         },
         $parseOptionsExpensive = {
-          csp: noUnsafeEval,
+          csp: $sniffer.csp,
           expensiveChecks: true
         };
 
@@ -14524,7 +14522,7 @@ function qFactory(nextTick, exceptionHandler) {
     this.$$state = { status: 0 };
   }
 
-  extend(Promise.prototype, {
+  Promise.prototype = {
     then: function(onFulfilled, onRejected, progressBack) {
       var result = new Deferred();
 
@@ -14546,7 +14544,7 @@ function qFactory(nextTick, exceptionHandler) {
         return handleCallback(error, false, callback);
       }, progressBack);
     }
-  });
+  };
 
   //Faster, more basic than angular.bind http://jsperf.com/angular-bind-vs-custom-vs-native
   function simpleBind(context, fn) {
@@ -14593,7 +14591,7 @@ function qFactory(nextTick, exceptionHandler) {
     this.notify = simpleBind(this, this.notify);
   }
 
-  extend(Deferred.prototype, {
+  Deferred.prototype = {
     resolve: function(val) {
       if (this.promise.$$state.status) return;
       if (val === this.promise) {
@@ -14656,7 +14654,7 @@ function qFactory(nextTick, exceptionHandler) {
         });
       }
     }
-  });
+  };
 
   /**
    * @ngdoc method
@@ -14739,9 +14737,6 @@ function qFactory(nextTick, exceptionHandler) {
    * the promise comes from a source that can't be trusted.
    *
    * @param {*} value Value or a promise
-   * @param {Function=} successCallback
-   * @param {Function=} errorCallback
-   * @param {Function=} progressCallback
    * @returns {Promise} Returns a promise of the passed value or promise
    */
 
@@ -14761,9 +14756,6 @@ function qFactory(nextTick, exceptionHandler) {
    * Alias of {@link ng.$q#when when} to maintain naming consistency with ES6.
    *
    * @param {*} value Value or a promise
-   * @param {Function=} successCallback
-   * @param {Function=} errorCallback
-   * @param {Function=} progressCallback
    * @returns {Promise} Returns a promise of the passed value or promise
    */
   var resolve = when;
@@ -15019,9 +15011,12 @@ function $RootScopeProvider() {
      * A root scope can be retrieved using the {@link ng.$rootScope $rootScope} key from the
      * {@link auto.$injector $injector}. Child scopes are created using the
      * {@link ng.$rootScope.Scope#$new $new()} method. (Most scopes are created automatically when
-     * compiled HTML template is executed.) See also the {@link guide/scope Scopes guide} for
-     * an in-depth introduction and usage examples.
+     * compiled HTML template is executed.)
      *
+     * Here is a simple scope snippet to show how you can interact with the scope.
+     * ```html
+     * <file src="./test/ng/rootScopeSpec.js" tag="docs1" />
+     * ```
      *
      * # Inheritance
      * A scope can inherit from a parent scope, as in this example:
@@ -15183,9 +15178,9 @@ function $RootScopeProvider() {
        *
        *
        * If you want to be notified whenever {@link ng.$rootScope.Scope#$digest $digest} is called,
-       * you can register a `watchExpression` function with no `listener`. (Be prepared for
-       * multiple calls to your `watchExpression` because it will execute multiple times in a
-       * single {@link ng.$rootScope.Scope#$digest $digest} cycle if a change is detected.)
+       * you can register a `watchExpression` function with no `listener`. (Since `watchExpression`
+       * can execute multiple times per {@link ng.$rootScope.Scope#$digest $digest} cycle when a
+       * change is detected, be prepared for multiple calls to your listener.)
        *
        * After a watcher is registered with the scope, the `listener` fn is called asynchronously
        * (via {@link ng.$rootScope.Scope#$evalAsync $evalAsync}) to initialize the
@@ -15947,14 +15942,11 @@ function $RootScopeProvider() {
       $apply: function(expr) {
         try {
           beginPhase('$apply');
-          try {
-            return this.$eval(expr);
-          } finally {
-            clearPhase();
-          }
+          return this.$eval(expr);
         } catch (e) {
           $exceptionHandler(e);
         } finally {
+          clearPhase();
           try {
             $rootScope.$digest();
           } catch (e) {
@@ -16873,7 +16865,7 @@ function $SceDelegateProvider() {
  *      characters: '`:`', '`/`', '`.`', '`?`', '`&`' and ';'.  It's a useful wildcard for use
  *      in a whitelist.
  *    - `**`: matches zero or more occurrences of *any* character.  As such, it's not
- *      appropriate for use in a scheme, domain, etc. as it would match too much.  (e.g.
+ *      not appropriate to use in for a scheme, domain, etc. as it would match too much.  (e.g.
  *      http://**.example.com/ would match http://evil.com/?ignore=.example.com/ and that might
  *      not have been the intention.)  Its usage at the very end of the path is ok.  (e.g.
  *      http://foo.example.com/templates/**).
@@ -16881,11 +16873,11 @@ function $SceDelegateProvider() {
  *    - *Caveat*:  While regular expressions are powerful and offer great flexibility,  their syntax
  *      (and all the inevitable escaping) makes them *harder to maintain*.  It's easy to
  *      accidentally introduce a bug when one updates a complex expression (imho, all regexes should
- *      have good test coverage).  For instance, the use of `.` in the regex is correct only in a
+ *      have good test coverage.).  For instance, the use of `.` in the regex is correct only in a
  *      small number of cases.  A `.` character in the regex used when matching the scheme or a
  *      subdomain could be matched against a `:` or literal `.` that was likely not intended.   It
  *      is highly recommended to use the string patterns and only fall back to regular expressions
- *      as a last resort.
+ *      if they as a last resort.
  *    - The regular expression must be an instance of RegExp (i.e. not a string.)  It is
  *      matched against the **entire** *normalized / absolute URL* of the resource being tested
  *      (even when the RegExp did not have the `^` and `$` codes.)  In addition, any flags
@@ -16895,7 +16887,7 @@ function $SceDelegateProvider() {
  *      remember to escape your regular expression (and be aware that you might need more than
  *      one level of escaping depending on your templating engine and the way you interpolated
  *      the value.)  Do make use of your platform's escaping mechanism as it might be good
- *      enough before coding your own.  E.g. Ruby has
+ *      enough before coding your own.  e.g. Ruby has
  *      [Regexp.escape(str)](http://www.ruby-doc.org/core-2.0.0/Regexp.html#method-c-escape)
  *      and Python has [re.escape](http://docs.python.org/library/re.html#re.escape).
  *      Javascript lacks a similar built in function for escaping.  Take a look at Google
@@ -18076,7 +18068,6 @@ function $FilterProvider($provide) {
    *    your filters, then you can use capitalization (`myappSubsectionFilterx`) or underscores
    *    (`myapp_subsection_filterx`).
    *    </div>
-    * @param {Function} factory If the first argument was a string, a factory function for the filter to be registered.
    * @returns {Object} Registered filter instance, or if a map of filters was provided then a map
    *    of the registered filter instances.
    */
@@ -18424,9 +18415,9 @@ function getTypeForFilter(val) {
          }
          element(by.model('amount')).clear();
          element(by.model('amount')).sendKeys('-1234');
-         expect(element(by.id('currency-default')).getText()).toBe('-$1,234.00');
-         expect(element(by.id('currency-custom')).getText()).toBe('-USD$1,234.00');
-         expect(element(by.id('currency-no-fractions')).getText()).toBe('-USD$1,234');
+         expect(element(by.id('currency-default')).getText()).toBe('($1,234.00)');
+         expect(element(by.id('currency-custom')).getText()).toBe('(USD$1,234.00)');
+         expect(element(by.id('currency-no-fractions')).getText()).toBe('(USD$1,234)');
        });
      </file>
    </example>
@@ -21510,11 +21501,7 @@ function baseInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   element.on('change', listener);
 
   ctrl.$render = function() {
-    // Workaround for Firefox validation #12102.
-    var value = ctrl.$isEmpty(ctrl.$viewValue) ? '' : ctrl.$viewValue;
-    if (element.val() !== value) {
-      element.val(value);
-    }
+    element.val(ctrl.$isEmpty(ctrl.$viewValue) ? '' : ctrl.$viewValue);
   };
 }
 
@@ -23080,29 +23067,27 @@ var ngControllerDirective = [function() {
  *
  * @element html
  * @description
- *
- * Angular has some features that can break certain
- * [CSP (Content Security Policy)](https://developer.mozilla.org/en/Security/CSP) rules.
- *
- * If you intend to implement these rules then you must tell Angular not to use these features.
+ * Enables [CSP (Content Security Policy)](https://developer.mozilla.org/en/Security/CSP) support.
  *
  * This is necessary when developing things like Google Chrome Extensions or Universal Windows Apps.
  *
+ * CSP forbids apps to use `eval` or `Function(string)` generated functions (among other things).
+ * For Angular to be CSP compatible there are only two things that we need to do differently:
  *
- * The following rules affect Angular:
+ * - don't use `Function` constructor to generate optimized value getters
+ * - don't inject custom stylesheet into the document
  *
- * * `unsafe-eval`: this rule forbids apps to use `eval` or `Function(string)` generated functions
- * (among other things). Angular makes use of this in the {@link $parse} service to provide a 30%
- * increase in the speed of evaluating Angular expressions.
+ * AngularJS uses `Function(string)` generated functions as a speed optimization. Applying the `ngCsp`
+ * directive will cause Angular to use CSP compatibility mode. When this mode is on AngularJS will
+ * evaluate all expressions up to 30% slower than in non-CSP mode, but no security violations will
+ * be raised.
  *
- * * `unsafe-inline`: this rule forbids apps from inject custom styles into the document. Angular
- * makes use of this to include some CSS rules (e.g. {@link ngCloak} and {@link ngHide}).
- * To make these directives work when a CSP rule is blocking inline styles, you must link to the
- * `angular-csp.css` in your HTML manually.
+ * CSP forbids JavaScript to inline stylesheet rules. In non CSP mode Angular automatically
+ * includes some CSS rules (e.g. {@link ng.directive:ngCloak ngCloak}).
+ * To make those directives work in CSP mode, include the `angular-csp.css` manually.
  *
- * If you do not provide `ngCsp` then Angular tries to autodetect if CSP is blocking unsafe-eval
- * and automatically deactivates this feature in the {@link $parse} service. This autodetection,
- * however, triggers a CSP error to be logged in the console:
+ * Angular tries to autodetect if CSP is active and automatically turn on the CSP-safe mode. This
+ * autodetection however triggers a CSP error to be logged in the console:
  *
  * ```
  * Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of
@@ -23111,38 +23096,10 @@ var ngControllerDirective = [function() {
  * ```
  *
  * This error is harmless but annoying. To prevent the error from showing up, put the `ngCsp`
- * directive on an element of the HTML document that appears before the `<script>` tag that loads
- * the `angular.js` file.
+ * directive on the root element of the application or on the `angular.js` script tag, whichever
+ * appears first in the html document.
  *
  * *Note: This directive is only available in the `ng-csp` and `data-ng-csp` attribute form.*
- *
- * You can specify which of the CSP related Angular features should be deactivated by providing
- * a value for the `ng-csp` attribute. The options are as follows:
- *
- * * no-inline-style: this stops Angular from injecting CSS styles into the DOM
- *
- * * no-unsafe-eval: this stops Angular from optimising $parse with unsafe eval of strings
- *
- * You can use these values in the following combinations:
- *
- *
- * * No declaration means that Angular will assume that you can do inline styles, but it will do
- * a runtime check for unsafe-eval. E.g. `<body>`. This is backwardly compatible with previous versions
- * of Angular.
- *
- * * A simple `ng-csp` (or `data-ng-csp`) attribute will tell Angular to deactivate both inline
- * styles and unsafe eval. E.g. `<body ng-csp>`. This is backwardly compatible with previous versions
- * of Angular.
- *
- * * Specifying only `no-unsafe-eval` tells Angular that we must not use eval, but that we can inject
- * inline styles. E.g. `<body ng-csp="no-unsafe-eval">`.
- *
- * * Specifying only `no-inline-style` tells Angular that we must not inject styles, but that we can
- * run eval - no automcatic check for unsafe eval will occur. E.g. `<body ng-csp="no-inline-style">`
- *
- * * Specifying both `no-unsafe-eval` and `no-inline-style` tells Angular that we must not inject
- * styles nor use eval, which is the same as an empty: ng-csp.
- * E.g.`<body ng-csp="no-inline-style;no-unsafe-eval">`
  *
  * @example
  * This example shows how to apply the `ngCsp` directive to the `html` tag.
@@ -23275,7 +23232,7 @@ var ngControllerDirective = [function() {
 
 // ngCsp is not implemented as a proper directive any more, because we need it be processed while we
 // bootstrap the system (before $parse is instantiated), for this reason we just have
-// the csp() fn that looks for the `ng-csp` attribute anywhere in the current doc
+// the csp.isActive() fn that looks for ng-csp attribute anywhere in the current doc
 
 /**
  * @ngdoc directive
@@ -25828,7 +25785,7 @@ var ngOptionsMinErr = minErr('ngOptions');
  * Consider the following example:
  *
  * ```html
- * <select ng-options="item.subItem as item.label for item in values track by item.id" ng-model="selected"></select>
+ * <select ng-options="item.subItem as item.label for item in values track by item.id" ng-model="selected">
  * ```
  *
  * ```js
@@ -28386,145 +28343,17 @@ var minlengthDirective = function() {
   };
 };
 
-if (window.angular.bootstrap) {
-  //AngularJS is already loaded, so we can return here...
-  console.log('WARNING: Tried to load angular more than once.');
-  return;
-}
-
-//try to bind to jquery now so that one can write jqLite(document).ready()
-//but we will rebind on bootstrap again.
-bindJQuery();
-
-publishExternalAPI(angular);
-
-angular.module("ngLocale", [], ["$provide", function($provide) {
-var PLURAL_CATEGORY = {ZERO: "zero", ONE: "one", TWO: "two", FEW: "few", MANY: "many", OTHER: "other"};
-function getDecimals(n) {
-  n = n + '';
-  var i = n.indexOf('.');
-  return (i == -1) ? 0 : n.length - i - 1;
-}
-
-function getVF(n, opt_precision) {
-  var v = opt_precision;
-
-  if (undefined === v) {
-    v = Math.min(getDecimals(n), 3);
+  if (window.angular.bootstrap) {
+    //AngularJS is already loaded, so we can return here...
+    console.log('WARNING: Tried to load angular more than once.');
+    return;
   }
 
-  var base = Math.pow(10, v);
-  var f = ((n * base) | 0) % base;
-  return {v: v, f: f};
-}
+  //try to bind to jquery now so that one can write jqLite(document).ready()
+  //but we will rebind on bootstrap again.
+  bindJQuery();
 
-$provide.value("$locale", {
-  "DATETIME_FORMATS": {
-    "AMPMS": [
-      "AM",
-      "PM"
-    ],
-    "DAY": [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday"
-    ],
-    "ERANAMES": [
-      "Before Christ",
-      "Anno Domini"
-    ],
-    "ERAS": [
-      "BC",
-      "AD"
-    ],
-    "FIRSTDAYOFWEEK": 6,
-    "MONTH": [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December"
-    ],
-    "SHORTDAY": [
-      "Sun",
-      "Mon",
-      "Tue",
-      "Wed",
-      "Thu",
-      "Fri",
-      "Sat"
-    ],
-    "SHORTMONTH": [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec"
-    ],
-    "WEEKENDRANGE": [
-      5,
-      6
-    ],
-    "fullDate": "EEEE, MMMM d, y",
-    "longDate": "MMMM d, y",
-    "medium": "MMM d, y h:mm:ss a",
-    "mediumDate": "MMM d, y",
-    "mediumTime": "h:mm:ss a",
-    "short": "M/d/yy h:mm a",
-    "shortDate": "M/d/yy",
-    "shortTime": "h:mm a"
-  },
-  "NUMBER_FORMATS": {
-    "CURRENCY_SYM": "$",
-    "DECIMAL_SEP": ".",
-    "GROUP_SEP": ",",
-    "PATTERNS": [
-      {
-        "gSize": 3,
-        "lgSize": 3,
-        "maxFrac": 3,
-        "minFrac": 0,
-        "minInt": 1,
-        "negPre": "-",
-        "negSuf": "",
-        "posPre": "",
-        "posSuf": ""
-      },
-      {
-        "gSize": 3,
-        "lgSize": 3,
-        "maxFrac": 2,
-        "minFrac": 2,
-        "minInt": 1,
-        "negPre": "-\u00a4",
-        "negSuf": "",
-        "posPre": "\u00a4",
-        "posSuf": ""
-      }
-    ]
-  },
-  "id": "en-us",
-  "pluralCat": function(n, opt_precision) {  var i = n | 0;  var vf = getVF(n, opt_precision);  if (i == 1 && vf.v == 0) {    return PLURAL_CATEGORY.ONE;  }  return PLURAL_CATEGORY.OTHER;}
-});
-}]);
+  publishExternalAPI(angular);
 
   jqLite(document).ready(function() {
     angularInit(document, bootstrap);
@@ -28532,4 +28361,4 @@ $provide.value("$locale", {
 
 })(window, document);
 
-!window.angular.$$csp().noInlineStyle && window.angular.element(document.head).prepend('<style type="text/css">@charset "UTF-8";[ng\\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style>');
+!window.angular.$$csp() && window.angular.element(document.head).prepend('<style type="text/css">@charset "UTF-8";[ng\\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style>');
